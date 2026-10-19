@@ -96,7 +96,14 @@ This starts PostgreSQL, n8n (with the three workflows and two credentials import
 3. Tap **Approve and send**. The email appears in Mailpit, the engine marks the lead as sent, Telegram confirms.
 4. `make seed-post` replays all 200 enquiries through the webhook (one every 0.2 s), then `docker compose exec engine leadintake report` prints the numbers.
 
-**Telegram needs a public HTTPS URL** to deliver button taps, so on a laptop the buttons only work through a tunnel: run `cloudflared tunnel --url http://localhost:5678`, put the URL it prints into `WEBHOOK_URL` in `.env`, set `N8N_ACTIVATE_WORKFLOWS=true` and run `docker compose up -d` again. On a VPS, `WEBHOOK_URL` is your domain. Without a tunnel the intake half still runs end to end: the webhook answers, the engine processes, the message arrives on your phone.
+**Telegram needs a public HTTPS URL** to deliver button taps, so on a laptop the buttons only work through a tunnel. The compose file ships one as an optional service, nothing to install:
+
+```bash
+docker compose --profile tunnel up -d tunnel
+docker compose logs tunnel | grep trycloudflare     # e.g. https://random-words.trycloudflare.com
+```
+
+Put that URL into `WEBHOOK_URL` in `.env`, set `N8N_ACTIVATE_WORKFLOWS=true`, run `docker compose up -d` again, and n8n registers the webhook with Telegram. The URL changes every time the tunnel restarts. On a VPS, `WEBHOOK_URL` is your domain (see [docs/vps-setup.md](docs/vps-setup.md)). Without a tunnel the intake half still runs end to end: the webhook answers, the engine processes, the message arrives on your phone; only the buttons stay silent.
 
 ### The engine on its own
 

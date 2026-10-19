@@ -98,6 +98,18 @@ services:
       engine:
         condition: service_started
 
+  # Optional: a public HTTPS URL for Telegram's button taps on a laptop, no install needed.
+  #   docker compose --profile tunnel up -d tunnel
+  #   docker compose logs tunnel | grep trycloudflare      -> put that URL into WEBHOOK_URL in .env
+  #   docker compose up -d n8n                             -> n8n re-registers the Telegram webhook
+  tunnel:
+    image: cloudflare/cloudflared:2025.8.1
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate --url http://n8n:5678
+    depends_on:
+      n8n:
+        condition: service_started
+
 volumes:
   pgdata:
   n8ndata:
