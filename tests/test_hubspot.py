@@ -28,7 +28,7 @@ def test_search_matches_on_email_or_phone_and_creates_deal_with_association():
             assert body["properties"]["email"] == "tom.hughes@example.com"
             assert body["properties"]["phone"] == "+447700900123"
             return httpx.Response(201, json={"id": "101"})
-        if request.url.path == "/crm/v3/objects/deals/search":
+        if request.url.path == "/crm/v4/objects/contacts/101/associations/deals":
             return httpx.Response(200, json={"results": []})
         if request.url.path == "/crm/v3/objects/deals":
             assert body["associations"][0]["to"]["id"] == "101"
@@ -46,7 +46,7 @@ def test_search_matches_on_email_or_phone_and_creates_deal_with_association():
     assert [c[1] for c in calls] == [
         "/crm/v3/objects/contacts/search",
         "/crm/v3/objects/contacts",
-        "/crm/v3/objects/deals/search",
+        "/crm/v4/objects/contacts/101/associations/deals",
         "/crm/v3/objects/deals",
     ]
 
@@ -72,3 +72,61 @@ def test_errors_surface_as_crm_error_for_n8n_retries():
     crm = make_crm(lambda request: httpx.Response(429, text="rate limited"))
     with pytest.raises(CRMError, match="429"):
         crm.find_contact("a@example.com", None)
+
+
+def test_create_conflict_returns_the_existing_contact():
+    # What a live portal does on a double click: the search has not indexed the first contact yet,
+    # so the create runs and HubSpot answers 409 with the contact's id.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/crm/v3/objects/contacts":
+            return httpx.Response(
+                409,
+                json={
+                    "status": "error",
+                    "message": "Contact already exists. Existing ID: 895935814889",
+                    "category": "CONFLICT",
+                },
+            )
+        return httpx.Response(500, text="unexpected")
+
+    ref = make_crm(handler).create_contact(normalise(enquiry()))
+    assert ref.id == "895935814889" and not ref.created
+
+
+def test_other_conflicts_still_raise():
+    crm = make_crm(lambda request: httpx.Response(409, json={"message": "something else"}))
+    with pytest.raises(CRMError, match="409") as e:
+        crm.create_contact(normalise(enquiry()))
+    assert e.value.status == 409
+
+
+def test_open_deal_is_read_through_associations_and_skips_closed_deals():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crm/v4/objects/contacts/7/associations/deals":
+            return httpx.Response(200, json={"results": [{"toObjectId": 1}, {"toObjectId": 2}]})
+        if request.url.path == "/crm/v3/objects/deals/batch/read":
+            body = json.loads(request.content)
+            assert [i["id"] for i in body["inputs"]] == ["1", "2"]
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {"id": "1", "properties": {"hs_is_closed": "true", "createdate": "b"}},
+                        {"id": "2", "properties": {"hs_is_closed": "false", "createdate": "a"}},
+                    ]
+                },
+            )
+        return httpx.Response(500, text="unexpected")
+
+    assert make_crm(handler).find_open_deal("7") == "2"
+
+
+def test_no_open_deal_when_every_associated_deal_is_closed():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/associations/deals"):
+            return httpx.Response(200, json={"results": [{"toObjectId": 1}]})
+        return httpx.Response(
+            200, json={"results": [{"id": "1", "properties": {"hs_is_closed": "true"}}]}
+        )
+
+    assert make_crm(handler).find_open_deal("7") is None

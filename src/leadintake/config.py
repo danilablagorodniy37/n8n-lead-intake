@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     criteria_path: str = "criteria.yaml"
     default_region: str = "GB"
     duplicate_window_hours: int = 24
+    # A CRM's search can trail its writes (HubSpot: seconds). For this long after the engine wrote
+    # a contact, a repeat with the same email or phone reuses it even if the search misses it.
+    crm_search_lag_seconds: int = 120
     api_token: str = ""  # if set, every request must carry "Authorization: Bearer <token>"
     seed_path: str = "seed/enquiries.jsonl"
 

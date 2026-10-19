@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy import select
 
 from leadintake import pipeline
+from leadintake.crm.fake import FakeCRM
 from leadintake.models import Contact, Deal, Lead
 from leadintake.report import build_report, expected_contacts
 from leadintake.seed import as_form_payload
@@ -36,6 +37,33 @@ def test_new_phone_for_known_email_updates_the_contact(session):
     contact = session.get(Contact, a.contact_id)
     assert b.contact_id == a.contact_id
     assert contact.phone == "+447700900999"
+
+
+class LaggingCRM(FakeCRM):
+    """A CRM whose search never sees new contacts yet, like HubSpot in the first seconds."""
+
+    def find_contact(self, email, phone):
+        return None
+
+
+def test_search_lag_does_not_create_a_second_contact(session):
+    crm = LaggingCRM(session)
+    a = pipeline.intake(enquiry(), session, crm=crm)
+    b = pipeline.intake(enquiry(email="", phone="+44 7700 900 123"), session, crm=crm)
+    assert b.contact_id == a.contact_id and b.is_duplicate
+    assert b.deal_id == a.deal_id
+    assert len(session.scalars(select(Contact)).all()) == 1
+
+
+def test_lag_fallback_is_off_when_the_window_is_zero(session, monkeypatch):
+    from leadintake.config import get_settings
+
+    monkeypatch.setenv("CRM_SEARCH_LAG_SECONDS", "0")
+    get_settings.cache_clear()
+    crm = LaggingCRM(session)
+    a = pipeline.intake(enquiry(), session, crm=crm)
+    b = pipeline.intake(enquiry(), session, crm=crm)
+    assert a.contact_id != b.contact_id
 
 
 def test_no_contact_details_creates_separate_contacts(session):

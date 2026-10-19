@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 (19 Oct 2026)
+
+First run against a real HubSpot portal (a developer test account). It found a bug the mock could not show, and the fix is measured in [docs/hubspot-live-run.md](docs/hubspot-live-run.md): 29 enquiries from 16 people, posted back to back, 16 contacts, 16 deals, 0 duplicates.
+
+### Fixed
+- A double click could fail with HubSpot 409 "Contact already exists": the search index trails writes by a few seconds, so the first click's contact was not found yet. The adapter now reads the existing id from the 409 and patches that contact.
+- The open deal is read through the associations API (v4) instead of deal search, so a deal created a second earlier is found and a second deal is not opened.
+
+### Added
+- `CRM_SEARCH_LAG_SECONDS` (default 120): for that long after the engine wrote a contact, a repeat with the same email or phone reuses it even if the CRM's search misses it. Covers same-phone repeats, which the 409 cannot, because phones are not unique in HubSpot.
+- `scripts/hubspot_live_check.py`: runs a slice of the seed against a portal and counts contacts per person, deals per contact, false merges, and which layer caught each repeat.
+- Six tests (78 in total): the 409 path, other conflicts still raising, open deal through associations, closed deals skipped, and the engine fallback with a CRM whose search always lags.
+
 ## 0.2.0 (19 Oct 2026)
 
 Tested end to end with a real Telegram bot, `claude-haiku-5-5` and the bundled tunnel: enquiry in, approval tap on a phone, email out, lead marked sent.

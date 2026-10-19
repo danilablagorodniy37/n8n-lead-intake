@@ -14,11 +14,11 @@ from __future__ import annotations
 import html
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .config import Settings, get_settings
-from .crm import CRM, get_crm
+from .crm import CRM, ContactRef, get_crm
 from .draft import Drafter, draft_with_guard, get_drafter
 from .models import APPROVED, EDITED, FAILED, PENDING, REJECTED, SENT, Lead, utcnow
 from .normalise import Normalised, normalise
@@ -49,13 +49,17 @@ def intake(
 
     received = utcnow()
     n = normalise(raw, s.default_region)
-    existing = crm.find_contact(n.email, n.phone)
+    existing = crm.find_contact(n.email, n.phone) or _just_written(
+        session, n, s.crm_search_lag_seconds
+    )
     if existing:
         contact = crm.update_contact(existing.id, n)
         is_duplicate = True
     else:
         contact = crm.create_contact(n)
-        is_duplicate = False
+        is_duplicate = not contact.created  # the CRM already had it (HubSpot 409)
+        if is_duplicate:
+            contact = crm.update_contact(contact.id, n)
 
     deal_id = crm.find_open_deal(contact.id)
     if deal_id is None:
@@ -112,6 +116,28 @@ def _deal_title(n: Normalised) -> str:
     kind = n.enquiry_type if n.enquiry_type != "other" else "enquiry"
     where = f", {n.area}" if n.area else ""
     return f"{kind.capitalize()}: {n.name}{where}"
+
+
+def _just_written(session: Session, n: Normalised, seconds: int) -> ContactRef | None:
+    """A contact this engine wrote moments ago, which the CRM's search may not return yet.
+
+    `draft_ready_at` is stamped by the engine at intake (unlike `received_at`, which can come from
+    the form), so it is the time the engine wrote the contact.
+    """
+    clauses = []
+    if n.email:
+        clauses.append(Lead.email == n.email)
+    if n.phone:
+        clauses.append(Lead.phone == n.phone)
+    if seconds <= 0 or not clauses:
+        return None
+    since = utcnow() - timedelta(seconds=seconds)
+    row = session.scalars(
+        select(Lead)
+        .where(or_(*clauses), Lead.contact_id.is_not(None), Lead.draft_ready_at >= since)
+        .order_by(Lead.draft_ready_at.desc())
+    ).first()
+    return ContactRef(id=row.contact_id) if row else None
 
 
 def _recent_repeat(session: Session, contact_id: str, n: Normalised, hours: int) -> str | None:

@@ -50,7 +50,7 @@ Three workflows in `workflows/`:
 
 The engine (`src/leadintake/`) is a FastAPI service with five routes that matter: `POST /leads`, `POST /leads/{id}/decision`, `POST /leads/{id}/sent`, `POST /leads/{id}/failed`, `POST /incidents`. Everything that needs a database or a test lives there: normalisation, the CRM upsert, scoring, drafting with the figures guard, and the approval state machine. n8n does what n8n is good at: triggers, the human in the loop, email, retries and the error path.
 
-Why a Python service next to n8n at all? De-duplication needs a store you can query by two keys and a test that proves it; scoring needs a file the owner edits; and "nothing is sent without approval" needs to be enforced somewhere a stray node cannot bypass. Those three things are about 500 lines of Python with 72 tests. The rest is wiring, and wiring is faster in n8n.
+Why a Python service next to n8n at all? De-duplication needs a store you can query by two keys and a test that proves it; scoring needs a file the owner edits; and "nothing is sent without approval" needs to be enforced somewhere a stray node cannot bypass. Those three things are about 500 lines of Python with 78 tests. The rest is wiring, and wiring is faster in n8n.
 
 ## Results
 
@@ -128,7 +128,7 @@ Put that URL into `WEBHOOK_URL` in `.env`, set `N8N_ACTIVATE_WORKFLOWS=true`, ru
 ```bash
 python -m venv .venv && . .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-make test                                         # 72 tests, no keys, no network
+make test                                         # 78 tests, no keys, no network
 leadintake seed --auto-approve                    # 200 enquiries through the engine, approved and marked sent
 leadintake report --markdown docs/report.md       # the numbers above
 leadintake serve                                  # the API on http://127.0.0.1:8000
@@ -161,12 +161,17 @@ Everything is an environment variable or a line in `.env`; `.env.example` lists 
 | `API_TOKEN` | empty | If set, n8n must send it as a bearer token (the compose file wires it through) |
 | `DEFAULT_REGION` | `GB` | Country used to parse phone numbers without a prefix |
 | `DUPLICATE_WINDOW_HOURS` | `24` | Same person, same message inside this window is a repeat, not a lead |
+| `CRM_SEARCH_LAG_SECONDS` | `120` | How long the engine trusts its own write over a CRM search that has not caught up |
 | `SMTP_*`, `REPLY_FROM` | Mailpit | Where approved replies are sent from |
 | `WEBHOOK_URL`, `N8N_ACTIVATE_WORKFLOWS` | localhost, `false` | Set both once n8n is reachable over HTTPS |
 
 ### HubSpot
 
-Create a private app in HubSpot with the `crm.objects.contacts` and `crm.objects.deals` read and write scopes, put its token in `HUBSPOT_ACCESS_TOKEN` and set `CRM_PROVIDER=hubspot`. The adapter searches contacts by email or phone, creates or patches the contact, looks for an open deal associated with it and creates one only if there is none. It is exercised against a mock of the v3 API in `tests/test_hubspot.py`; a run against your own free portal with ten test enquiries is the first thing to do with a real token.
+Create a service key (or a private app) in HubSpot with the `crm.objects.contacts` and `crm.objects.deals` read and write scopes, put it in `HUBSPOT_ACCESS_TOKEN` and set `CRM_PROVIDER=hubspot`. The adapter searches contacts by email or phone, creates or patches the contact, reads the contact's associated deals and opens one only if none is open.
+
+**Tested on a real portal, not only a mock.** On a HubSpot developer test account, 29 enquiries from 16 people posted back to back produced 16 contacts, 16 deals and no duplicates ([docs/hubspot-live-run.md](docs/hubspot-live-run.md)). The first live run found what the mock could not: HubSpot's search trails its writes by a few seconds, so a double click arrived before the first contact was searchable and the create failed with 409. Since 0.3.0 the adapter treats that 409 as a match, reads deals through the associations API, and the engine reuses a contact it wrote in the last `CRM_SEARCH_LAG_SECONDS` (120 by default). In the live run a third to a half of the repeats arrived before the search caught up, and all of them landed on the right contact.
+
+Check your own portal with `HUBSPOT_ACCESS_TOKEN=... python scripts/hubspot_live_check.py` (a test account, not a live one: it creates records).
 
 ## Project layout
 
@@ -178,12 +183,12 @@ src/leadintake/
   normalise.py        email, E.164 phone, budget in pounds, enquiry type
   scoring.py          criteria.yaml -> score, qualification, reasons, missing details
   draft.py            template or model, plus the figures guard
-  crm/                fake (two tables) and hubspot (v3 API) behind one five-method interface
+  crm/                fake (two tables) and hubspot (v3 and v4 associations) behind one five-method interface
   api.py              the FastAPI routes n8n calls
   seed.py, report.py  the 200 synthetic enquiries and the numbers
 criteria.yaml         the owner's rules (demo values for a fictional estate agency)
 seed/enquiries.jsonl  the test set, with person_id as ground truth
-tests/                72 tests, no network and no keys needed
+tests/                78 tests, no network and no keys needed
 ```
 
 ## What I would add for production
