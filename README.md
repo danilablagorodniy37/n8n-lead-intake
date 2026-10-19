@@ -74,7 +74,13 @@ Two numbers are deliberately not in that table. **Reply time** is the owner's: t
 
 The whole loop on a laptop: Docker Compose, the bundled Cloudflare tunnel, a real Telegram bot, `claude-haiku-5-5` drafting, Mailpit catching the email. An enquiry posted to the webhook, the owner tapped **Approve and send** on the phone, and every node in the approval workflow ran green:
 
+<img src="docs/telegram-approval.jpg" width="300" align="right" alt="The owner's Telegram: the drafted reply with Approve, Edit and Reject, then the Sent confirmation">
+
+What the owner sees on the phone: the score, the reasons and the drafted reply in one message, three buttons, and the confirmation once the email is out. On a narrow phone Telegram shortens the first button to "Approve an...".
+
 ![The approval workflow after one tap: decision recorded, true branch, email sent, engine marked it sent, owner told](docs/execution-approved.png)
+
+<br clear="right">
 
 The email the model drafted and the owner approved, as it arrived. No fee, no valuation figure, the missing details asked for, two options for the next step, all from the rules in `criteria.yaml`:
 
