@@ -6,4 +6,4 @@ an idempotent CRM upsert, scoring against the owner's criteria, drafting a reply
 machine that makes sure nothing is sent before a person approves it.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

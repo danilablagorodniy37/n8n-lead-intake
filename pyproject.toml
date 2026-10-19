@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leadintake"
-version = "0.1.0"
+version = "0.2.0"
 description = "Website enquiry to CRM to an approved AI reply, with zero duplicates. The Python engine behind the n8n-lead-intake workflows."
 readme = "README.md"
 license = { text = "MIT" }

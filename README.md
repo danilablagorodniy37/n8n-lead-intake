@@ -50,7 +50,7 @@ Three workflows in `workflows/`:
 
 The engine (`src/leadintake/`) is a FastAPI service with five routes that matter: `POST /leads`, `POST /leads/{id}/decision`, `POST /leads/{id}/sent`, `POST /leads/{id}/failed`, `POST /incidents`. Everything that needs a database or a test lives there: normalisation, the CRM upsert, scoring, drafting with the figures guard, and the approval state machine. n8n does what n8n is good at: triggers, the human in the loop, email, retries and the error path.
 
-Why a Python service next to n8n at all? De-duplication needs a store you can query by two keys and a test that proves it; scoring needs a file the owner edits; and "nothing is sent without approval" needs to be enforced somewhere a stray node cannot bypass. Those three things are 400 lines of Python with 70 tests. The rest is wiring, and wiring is faster in n8n.
+Why a Python service next to n8n at all? De-duplication needs a store you can query by two keys and a test that proves it; scoring needs a file the owner edits; and "nothing is sent without approval" needs to be enforced somewhere a stray node cannot bypass. Those three things are about 500 lines of Python with 72 tests. The rest is wiring, and wiring is faster in n8n.
 
 ## Results
 
@@ -122,7 +122,7 @@ Put that URL into `WEBHOOK_URL` in `.env`, set `N8N_ACTIVATE_WORKFLOWS=true`, ru
 ```bash
 python -m venv .venv && . .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-make test                                         # 70 tests, no keys, no network
+make test                                         # 72 tests, no keys, no network
 leadintake seed --auto-approve                    # 200 enquiries through the engine, approved and marked sent
 leadintake report --markdown docs/report.md       # the numbers above
 leadintake serve                                  # the API on http://127.0.0.1:8000
@@ -177,7 +177,7 @@ src/leadintake/
   seed.py, report.py  the 200 synthetic enquiries and the numbers
 criteria.yaml         the owner's rules (demo values for a fictional estate agency)
 seed/enquiries.jsonl  the test set, with person_id as ground truth
-tests/                70 tests, no network and no keys needed
+tests/                72 tests, no network and no keys needed
 ```
 
 ## What I would add for production
