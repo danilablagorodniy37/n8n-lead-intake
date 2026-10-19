@@ -68,7 +68,19 @@ Measured by `leadintake seed --auto-approve && leadintake report` on the 200 syn
 | Engine time, form received to draft ready, p50 / p95 (template drafter) | 1 ms / 2 ms |
 | Drafts replaced by the figures guard | 0 |
 
-Two numbers are deliberately not in that table. **Reply time** is the owner's: the engine has the draft ready in milliseconds with the template and in a few seconds with a model, and the email goes out seconds after the tap, so form-to-reply is however long the owner takes to look at their phone. **LLM cost per lead** depends on the model; the report prints it from token counts at the prices configured in `.env`, and with the default template drafter it is zero. With `claude-haiku-5-5` and this prompt (about 700 input and 200 output tokens) it is in the region of $0.0002 per lead at the configured prices, an estimate until you run it with your own key.
+Two numbers are deliberately not in that table. **Reply time** is the owner's: the engine has the draft ready in milliseconds with the template and in a few seconds with a model, and the email goes out seconds after the tap, so form-to-reply is however long the owner takes to look at their phone. **LLM cost per lead** depends on the model; the report prints it from token counts at the prices configured in `.env`, and with the default template drafter it is zero. On the live run below, `claude-haiku-5-5` wrote the reply for **$0.00025** at the configured prices (one enquiry, so read it as an order of magnitude, not an average).
+
+### Live run, 19 Oct 2026
+
+The whole loop on a laptop: Docker Compose, the bundled Cloudflare tunnel, a real Telegram bot, `claude-haiku-5-5` drafting, Mailpit catching the email. An enquiry posted to the webhook, the owner tapped **Approve and send** on the phone, and every node in the approval workflow ran green:
+
+![The approval workflow after one tap: decision recorded, true branch, email sent, engine marked it sent, owner told](docs/execution-approved.png)
+
+The email the model drafted and the owner approved, as it arrived. No fee, no valuation figure, the missing details asked for, two options for the next step, all from the rules in `criteria.yaml`:
+
+![The approved reply in Mailpit](docs/mailpit-reply.png)
+
+The first attempt failed, which is how the error path got its live test: Telegram rejected the message because an email address in angle brackets broke its Markdown parser. The intake node retried three times, the error workflow logged the incident in the engine and sent the owner an alert with the node and the execution link. The fix (HTML parse mode, every engine string escaped, a test with hostile input) is in the second commit.
 
 The enquiries, the agency and the people are synthetic. A real form is messier in ways this seed does not cover: see Limitations.
 
