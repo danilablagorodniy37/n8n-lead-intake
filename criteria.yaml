@@ -1,0 +1,54 @@
+# The owner's rules. Edit this file, not a prompt. Demo values for a fictional estate agency.
+business:
+  name: Hollis & Grey Estate Agents
+  from_name: Hollis & Grey
+  signature: |
+    Kind regards,
+    The Hollis & Grey team
+    01784 000000 (demo number)
+  reply_by: the next working day
+
+areas:
+  preferred: [Staines-upon-Thames, Staines, Egham, Ashford, Sunbury, Shepperton, Laleham, Stanwell]
+  acceptable: [Feltham, Twickenham, Weybridge, Chertsey, Windsor, Virginia Water]
+
+budget_gbp:
+  min: 250000
+  sweet_spot: [350000, 900000]
+
+# 0 to 30: how much the owner wants each kind of enquiry
+enquiry_types:
+  valuation: 30
+  sell: 30
+  let: 20
+  buy: 15
+  rent: 8
+  other: 0
+
+urgency_keywords:
+  high: [asap, urgent, urgently, this week, as soon as possible, immediately, today, tomorrow]
+  medium: [soon, next month, next few weeks, in the coming weeks, quickly]
+
+weights:
+  area: 25
+  budget: 25
+  type: 30
+  urgency: 10
+  completeness: 10
+
+thresholds:
+  hot: 70
+  warm: 40
+
+# What the drafted reply may and may not do
+reply_rules:
+  max_words: 120
+  never:
+    - quote a fee, a commission, a price or a valuation figure
+    - promise a date or a time for a visit
+    - mention other clients or properties
+  always:
+    - thank them and name what they asked for
+    - ask for the details that are missing
+    - offer the next step: a call or a visit, with two options for when
+  next_step: a 15-minute call or a visit, whichever suits

@@ -1,0 +1,383 @@
+{
+  "id": "LeadIntakeApprv1",
+  "name": "Lead approval: Telegram tap to email",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "LeadIntakeError1",
+    "saveManualExecutions": true,
+    "timezone": "Europe/London"
+  },
+  "nodes": [
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000001",
+      "name": "Telegram button or reply",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 400],
+      "webhookId": "lead-approval-telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "LeadIntakeTelegr",
+          "name": "Telegram bot (lead intake)"
+        }
+      },
+      "parameters": {
+        "updates": ["callback_query", "message"],
+        "additionalFields": {}
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000002",
+      "name": "Parse the tap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 400],
+      "parameters": {
+        "jsCode": "// One item per update we care about; anything else is dropped.\nconst out = [];\nfor (const item of $input.all()) {\n  const u = item.json;\n  if (u.callback_query && typeof u.callback_query.data === 'string') {\n    const [verb, leadId] = u.callback_query.data.split(':');\n    const action = verb === 'edit' ? 'edit_request' : verb;\n    if (!['approve', 'reject', 'edit_request'].includes(action) || !leadId) continue;\n    out.push({ json: {\n      action, lead_id: leadId, text: '',\n      chat_id: u.callback_query.message.chat.id,\n      message_id: u.callback_query.message.message_id,\n      callback_id: u.callback_query.id,\n      by: `telegram:${u.callback_query.from.username || u.callback_query.from.id}`,\n    }});\n    continue;\n  }\n  // The owner replied to our \"send me the new text\" prompt: the prompt carries \"#lead <id>\".\n  const m = u.message;\n  if (m && m.reply_to_message && typeof m.reply_to_message.text === 'string' && typeof m.text === 'string') {\n    const found = m.reply_to_message.text.match(/#lead\\s+(lead_[0-9a-f]+)/);\n    if (!found) continue;\n    out.push({ json: {\n      action: 'edit', lead_id: found[1], text: m.text,\n      chat_id: m.chat.id, message_id: m.message_id, callback_id: '',\n      by: `telegram:${m.from.username || m.from.id}`,\n    }});\n  }\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000003",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [520, 400],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "id": "r-approve", "leftValue": "={{ $json.action }}", "rightValue": "approve", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "approve"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "id": "r-edit", "leftValue": "={{ $json.action }}", "rightValue": "edit", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "edit (new text)"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "id": "r-reject", "leftValue": "={{ $json.action }}", "rightValue": "reject", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reject"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "id": "r-edit-request", "leftValue": "={{ $json.action }}", "rightValue": "edit_request", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "edit requested"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000004",
+      "name": "Ask for the new text",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [800, 680],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "LeadIntakeTelegr",
+          "name": "Telegram bot (lead intake)"
+        }
+      },
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "=Reply to this message with the full text you want sent. The subject stays the same.\n#lead {{ $json.lead_id }}",
+        "replyMarkup": "forceReply",
+        "forceReply": {
+          "force_reply": true,
+          "selective": false
+        },
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000005",
+      "name": "Record decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 400],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "=http://engine:8000/leads/{{ $json.lead_id }}/decision",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LEAD_ENGINE_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ action: $json.action, text: $json.text, by: $json.by }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000006",
+      "name": "Approved or edited?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1060, 400],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            { "id": "send-gate", "leftValue": "={{ $json.send }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000007",
+      "name": "Send reply",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1320, 280],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "smtp": {
+          "id": "LeadIntakeSmtp01",
+          "name": "SMTP (lead intake)"
+        }
+      },
+      "parameters": {
+        "fromEmail": "={{ $env.REPLY_FROM }}",
+        "toEmail": "={{ $json.reply_to }}",
+        "subject": "={{ $json.reply_subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.reply_text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000008",
+      "name": "Engine: mark sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1580, 280],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "=http://engine:8000/leads/{{ $('Record decision').item.json.id }}/sent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LEAD_ENGINE_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000009",
+      "name": "Tell the owner: sent",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1840, 280],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "LeadIntakeTelegr",
+          "name": "Telegram bot (lead intake)"
+        }
+      },
+      "parameters": {
+        "chatId": "={{ $('Parse the tap').item.json.chat_id }}",
+        "text": "=Sent to {{ $('Record decision').item.json.reply_name }} <{{ $('Record decision').item.json.reply_to }}>\n#lead {{ $json.id }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000010",
+      "name": "Log to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1840, 480],
+      "disabled": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PUT-YOUR-SPREADSHEET-ID-HERE"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "leads"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000011",
+      "name": "Tell the owner: rejected",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1320, 520],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "LeadIntakeTelegr",
+          "name": "Telegram bot (lead intake)"
+        }
+      },
+      "parameters": {
+        "chatId": "={{ $('Parse the tap').item.json.chat_id }}",
+        "text": "=Rejected, nothing sent. The contact and deal stay in the CRM.\n#lead {{ $json.id }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "7a2f0c44-2222-4b1d-8e02-000000000012",
+      "name": "How this works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 80],
+      "parameters": {
+        "width": 1100,
+        "height": 160,
+        "content": "## Lead approval\nEvery tap on the Telegram message arrives here. Approve and Reject are recorded in the engine straight away. Edit asks the owner to reply with the new text; that reply comes back through the same trigger with the lead id. The email node has exactly one way in: the true branch of \"Approved or edited?\", which reads the engine's answer. The engine itself refuses to mark a lead as sent unless a decision was recorded first. The Google Sheet node is off by default: switch it on and pick a spreadsheet if you want a log outside the engine."
+      }
+    }
+  ],
+  "connections": {
+    "Telegram button or reply": {
+      "main": [
+        [
+          { "node": "Parse the tap", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse the tap": {
+      "main": [
+        [
+          { "node": "Route", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          { "node": "Record decision", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Record decision", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Record decision", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Ask for the new text", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Record decision": {
+      "main": [
+        [
+          { "node": "Approved or edited?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Approved or edited?": {
+      "main": [
+        [
+          { "node": "Send reply", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Tell the owner: rejected", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send reply": {
+      "main": [
+        [
+          { "node": "Engine: mark sent", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Engine: mark sent": {
+      "main": [
+        [
+          { "node": "Tell the owner: sent", "type": "main", "index": 0 },
+          { "node": "Log to Google Sheet", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "n8n-lead-intake"
+  },
+  "tags": []
+}

@@ -1,0 +1,155 @@
+{
+  "id": "LeadIntakeError1",
+  "name": "Lead intake: error handler",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "Europe/London"
+  },
+  "nodes": [
+    {
+      "id": "c3d9e5a0-3333-4c2e-9f03-000000000001",
+      "name": "Something failed",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "parameters": {}
+    },
+    {
+      "id": "c3d9e5a0-3333-4c2e-9f03-000000000002",
+      "name": "Shape the alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "parameters": {
+        "jsCode": "// n8n hands the error trigger one item: { execution: {...}, workflow: {...} }\nconst e = $input.first().json;\nconst exec = e.execution || {};\nconst err = exec.error || {};\nconst workflow = (e.workflow && e.workflow.name) || 'unknown workflow';\nconst node = exec.lastNodeExecuted || (err.node && err.node.name) || 'unknown node';\nconst message = err.message || JSON.stringify(err).slice(0, 500);\nconst url = exec.url || '';\n// Try to recover the lead id from whatever the failed node was working on.\nlet leadId = null;\ntry {\n  const text = JSON.stringify(exec.lastNodeExecuted ? e : err);\n  const m = text.match(/lead_[0-9a-f]{10}/);\n  if (m) leadId = m[0];\n} catch (ignored) {}\nconst alert = [\n  `Automation failed after 3 tries: ${workflow}`,\n  `Node: ${node}`,\n  `Error: ${message}`,\n  leadId ? `Lead: ${leadId}` : 'Lead: not identified',\n  url ? `Execution: ${url}` : '',\n].filter(Boolean).join('\\n');\nreturn [{ json: { workflow, node, message, lead_id: leadId, execution_url: url, alert, payload: { mode: exec.mode, id: exec.id, error: err } } }];"
+      }
+    },
+    {
+      "id": "c3d9e5a0-3333-4c2e-9f03-000000000003",
+      "name": "Engine: log incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, 180],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "http://engine:8000/incidents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LEAD_ENGINE_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: $json.workflow, node: $json.node, message: $json.message, lead_id: $json.lead_id, payload: $json.payload }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "c3d9e5a0-3333-4c2e-9f03-000000000004",
+      "name": "Alert the owner",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [540, 420],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "LeadIntakeTelegr",
+          "name": "Telegram bot (lead intake)"
+        }
+      },
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.alert }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "c3d9e5a0-3333-4c2e-9f03-000000000005",
+      "name": "Log to Google Sheet (failed)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [820, 420],
+      "disabled": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PUT-YOUR-SPREADSHEET-ID-HERE"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "failed"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c3d9e5a0-3333-4c2e-9f03-000000000006",
+      "name": "How this works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, -20],
+      "parameters": {
+        "width": 820,
+        "height": 150,
+        "content": "## Error handler\nBoth lead workflows name this one as their error workflow. Every outbound node retries three times with a five-second wait first; only then does this run. The incident goes to the engine (so `leadintake report` counts it) and to the owner on Telegram with the node, the error and the lead id when it can be recovered. The Google Sheet node is off by default."
+      }
+    }
+  ],
+  "connections": {
+    "Something failed": {
+      "main": [
+        [
+          { "node": "Shape the alert", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Shape the alert": {
+      "main": [
+        [
+          { "node": "Engine: log incident", "type": "main", "index": 0 },
+          { "node": "Alert the owner", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Alert the owner": {
+      "main": [
+        [
+          { "node": "Log to Google Sheet (failed)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "n8n-lead-intake"
+  },
+  "tags": []
+}

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: lint, secrets, tests, report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: python scripts/check_secrets.py
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest -q
+      - name: seed 200 enquiries through the engine and print the report
+        run: |
+          leadintake seed --auto-approve > /dev/null
+          leadintake report
+        env:
+          CRM_PROVIDER: fake
+          LLM_PROVIDER: fake
+
+  compose:
+    name: workflows import into n8n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: cp .env.example .env
+      - run: docker compose up -d --build db engine mailpit n8n-import
+      - name: wait for the import job and show its log
+        run: |
+          for i in $(seq 1 60); do
+            status=$(docker compose ps -a --format '{{.Service}} {{.State}} {{.ExitCode}}' | grep '^n8n-import' || true)
+            echo "$status"
+            case "$status" in *exited\ 0*) break;; *exited*) docker compose logs n8n-import; exit 1;; esac
+            sleep 5
+          done
+          docker compose logs n8n-import
+      - name: the engine answers
+        run: curl -fsS http://localhost:8000/healthz
+      - run: docker compose down -v
+        if: always()

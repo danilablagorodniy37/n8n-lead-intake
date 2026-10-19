@@ -1,0 +1,22 @@
+# secrets and local state
+.env
+.env.*
+!.env.example
+data/*
+!data/.gitkeep
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# editors and os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

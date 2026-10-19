@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leadintake"
+version = "0.1.0"
+description = "Website enquiry to CRM to an approved AI reply, with zero duplicates. The Python engine behind the n8n-lead-intake workflows."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Daniel Blago" }]
+keywords = ["n8n", "automation", "crm", "hubspot", "lead-intake", "human-in-the-loop", "fastapi", "claude"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: FastAPI",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Office/Business",
+]
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "sqlalchemy>=2.0",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.4",
+  "phonenumbers>=9.0",
+  "pyyaml>=6.0",
+  "httpx>=0.27",
+  "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.50"]
+postgres = ["psycopg[binary]>=3.2"]
+dev = ["pytest>=8.0", "ruff>=0.6", "httpx>=0.27"]
+
+[project.scripts]
+leadintake = "leadintake.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/danilablagorodniy37/n8n-lead-intake"
+Issues = "https://github.com/danilablagorodniy37/n8n-lead-intake/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/leadintake/api.py" = ["B008"]  # FastAPI's Depends() in defaults is the documented style
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
