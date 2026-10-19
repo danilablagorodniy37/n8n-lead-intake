@@ -23,7 +23,7 @@
       "typeVersion": 2,
       "position": [260, 300],
       "parameters": {
-        "jsCode": "// n8n hands the error trigger one item: { execution: {...}, workflow: {...} }\nconst e = $input.first().json;\nconst exec = e.execution || {};\nconst err = exec.error || {};\nconst workflow = (e.workflow && e.workflow.name) || 'unknown workflow';\nconst node = exec.lastNodeExecuted || (err.node && err.node.name) || 'unknown node';\nconst message = err.message || JSON.stringify(err).slice(0, 500);\nconst url = exec.url || '';\n// Try to recover the lead id from whatever the failed node was working on.\nlet leadId = null;\ntry {\n  const text = JSON.stringify(exec.lastNodeExecuted ? e : err);\n  const m = text.match(/lead_[0-9a-f]{10}/);\n  if (m) leadId = m[0];\n} catch (ignored) {}\nconst alert = [\n  `Automation failed after 3 tries: ${workflow}`,\n  `Node: ${node}`,\n  `Error: ${message}`,\n  leadId ? `Lead: ${leadId}` : 'Lead: not identified',\n  url ? `Execution: ${url}` : '',\n].filter(Boolean).join('\\n');\nreturn [{ json: { workflow, node, message, lead_id: leadId, execution_url: url, alert, payload: { mode: exec.mode, id: exec.id, error: err } } }];"
+        "jsCode": "// n8n hands the error trigger one item: { execution: {...}, workflow: {...} }\nconst e = $input.first().json;\nconst exec = e.execution || {};\nconst err = exec.error || {};\nconst workflow = (e.workflow && e.workflow.name) || 'unknown workflow';\nconst node = exec.lastNodeExecuted || (err.node && err.node.name) || 'unknown node';\nconst message = err.message || JSON.stringify(err).slice(0, 500);\nconst url = exec.url || '';\n// Try to recover the lead id from whatever the failed node was working on.\nlet leadId = null;\ntry {\n  const text = JSON.stringify(exec.lastNodeExecuted ? e : err);\n  const m = text.match(/lead_[0-9a-f]{10}/);\n  if (m) leadId = m[0];\n} catch (ignored) {}\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst alert = [\n  `<b>Automation failed after 3 tries:</b> ${esc(workflow)}`,\n  `Node: ${esc(node)}`,\n  `Error: ${esc(message)}`,\n  leadId ? `Lead: ${leadId}` : 'Lead: not identified',\n  url ? `Execution: ${esc(url)}` : '',\n].filter(Boolean).join('\\n');\nreturn [{ json: { workflow, node, message, lead_id: leadId, execution_url: url, alert, payload: { mode: exec.mode, id: exec.id, error: err } } }];"
       }
     },
     {
@@ -75,7 +75,8 @@
         "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "text": "={{ $json.alert }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       }
     },

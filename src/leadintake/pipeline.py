@@ -11,6 +11,7 @@ guarantee on the engine side; `tests/test_workflows_json.py` checks the n8n side
 
 from __future__ import annotations
 
+import html
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -173,18 +174,19 @@ def mark_failed(session: Session, lead_id: str, error: str) -> Lead:
 
 
 def approval_message(lead: Lead) -> str:
-    """Plain text for the Telegram message. The `#lead` line lets the Edit flow find the lead."""
+    """Text for the Telegram message, HTML-escaped (the nodes send with parse_mode HTML) with the
+    first line in bold. The `#lead` line lets the Edit flow find the lead."""
     flag = {"hot": "HOT", "warm": "WARM", "cold": "COLD"}.get(lead.qualification, "LEAD")
-    who = lead.name
+    e = html.escape
+    who = e(lead.name)
     if lead.email:
-        who += f" <{lead.email}>"
+        who += f", {e(lead.email)}"
     if lead.phone:
-        who += f" {lead.phone}"
-    lines = [
-        f"{flag} lead, score {lead.score}/100: {lead.enquiry_type}"
-        + (f" in {lead.area}" if lead.area else ""),
-        who,
-    ]
+        who += f", {e(lead.phone)}"
+    headline = f"{flag} lead, score {lead.score}/100: {e(lead.enquiry_type)}" + (
+        f" in {e(lead.area)}" if lead.area else ""
+    )
+    lines = [f"<b>{headline}</b>", who]
     if lead.budget_gbp:
         lines.append(f"Budget: £{lead.budget_gbp:,}")
     if lead.is_duplicate:
@@ -192,20 +194,21 @@ def approval_message(lead: Lead) -> str:
     if lead.repeat_of:
         lines.append("Same message already received today (double submission)")
     if lead.reasons:
-        lines.append("Why: " + "; ".join(lead.reasons))
+        lines.append("Why: " + e("; ".join(lead.reasons)))
     if lead.missing:
-        lines.append("Missing: " + ", ".join(lead.missing))
+        lines.append("Missing: " + e(", ".join(lead.missing)))
     if lead.guard_triggered:
         lines.append(
             "Draft came from the template: the model's draft contained an unsupported figure"
         )
+    message = (lead.message[:500] + ("..." if len(lead.message) > 500 else "")) or "(empty message)"
     lines += [
         "",
-        "They wrote:",
-        (lead.message[:500] + ("..." if len(lead.message) > 500 else "")) or "(empty message)",
+        "<b>They wrote:</b>",
+        e(message),
         "",
-        f"Draft reply, subject: {lead.draft_subject}",
-        lead.draft_text,
+        f"<b>Draft reply</b>, subject: {e(lead.draft_subject)}",
+        e(lead.draft_text),
         "",
         f"#lead {lead.id}",
     ]

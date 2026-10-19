@@ -84,6 +84,19 @@ def test_reject_and_edit_paths(session):
 def test_approval_message_carries_the_lead_marker(session):
     lead = pipeline.intake(enquiry(), session)
     text = pipeline.approval_message(lead)
-    assert text.startswith("HOT lead, score")
+    assert text.startswith("<b>HOT lead, score")
     assert f"#lead {lead.id}" in text
     assert "Draft reply" in text
+
+
+def test_approval_message_is_safe_for_telegram_html(session):
+    lead = pipeline.intake(
+        enquiry(name="Tom <script> & Co", message="Is 3 < 4 & 5 > 2? <b>bold</b>"), session
+    )
+    text = pipeline.approval_message(lead)
+    assert "<script>" not in text and "&lt;script&gt;" in text
+    assert "&amp;" in text and "<b>bold</b>" not in text
+    # the only tags are the bold ones we add ourselves
+    import re
+
+    assert set(re.findall(r"</?([a-z]+)>", text)) == {"b"}

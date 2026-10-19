@@ -119,7 +119,8 @@
           "selective": false
         },
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       }
     },
@@ -238,9 +239,10 @@
       },
       "parameters": {
         "chatId": "={{ $('Parse the tap').item.json.chat_id }}",
-        "text": "=Sent to {{ $('Record decision').item.json.reply_name }} <{{ $('Record decision').item.json.reply_to }}>\n#lead {{ $json.id }}",
+        "text": "=<b>Sent</b> to {{ $('Record decision').item.json.reply_name }} ({{ $('Record decision').item.json.reply_to }})\n#lead {{ $json.id }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       }
     },
@@ -292,9 +294,10 @@
       },
       "parameters": {
         "chatId": "={{ $('Parse the tap').item.json.chat_id }}",
-        "text": "=Rejected, nothing sent. The contact and deal stay in the CRM.\n#lead {{ $json.id }}",
+        "text": "=<b>Rejected</b>, nothing sent. The contact and deal stay in the CRM.\n#lead {{ $json.id }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       }
     },
